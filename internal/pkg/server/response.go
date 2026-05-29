@@ -1,0 +1,64 @@
+package server
+
+import (
+	"encoding/json"
+	stderr "errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+
+	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
+)
+
+const maxBodyBytes = 1 << 20 // 1 MiB
+
+func WriteJSON(w http.ResponseWriter, status int, v any) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(v)
+}
+
+func WriteError(w http.ResponseWriter, status int, msg string) {
+	_ = WriteJSON(w, status, map[string]string{"error": msg})
+}
+
+func WriteAppError(w http.ResponseWriter, e *apperr.Error) {
+	_ = WriteJSON(w, int(e.Status), map[string]any{
+		"error": map[string]any{
+			"code":    e.Code,
+			"message": e.Message,
+		},
+	})
+}
+
+func RespondErr(w http.ResponseWriter, err error) {
+	var ae *apperr.Error
+	if stderr.As(err, &ae) {
+		if ae.Err != nil {
+			log.Printf("app error: %v", ae.Err)
+		}
+		WriteAppError(w, ae)
+		return
+	}
+
+	log.Printf("unexpected error: %v", err)
+	WriteAppError(w, apperr.Internal(err))
+}
+
+func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(v); err != nil {
+		return fmt.Errorf("decode body: %w", err)
+	}
+
+	if err := dec.Decode(&struct{}{}); !stderr.Is(err, io.EOF) {
+		return stderr.New("body must contain a single JSON object")
+	}
+
+	return nil
+}
