@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 
 	"github.com/Rioverde/zingpass/internal/app/auth/handlers"
@@ -20,8 +21,16 @@ import (
 	"github.com/Rioverde/zingpass/internal/pkg/jwt"
 	"github.com/Rioverde/zingpass/internal/pkg/log"
 	"github.com/Rioverde/zingpass/internal/pkg/server"
+
+	_ "github.com/Rioverde/zingpass/docs" // swagger spec
 )
 
+//	@title			Zingpass API
+//	@version		1.0
+//	@description	Auth service: register, login, JWT-based access tokens, refresh-token rotation with reuse detection.
+//	@host			localhost:8080
+//	@BasePath		/
+//	@schemes		http
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -55,6 +64,10 @@ func main() {
 			logger.Error("write response failed", zap.Error(err))
 		}
 	})
+
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+	))
 
 	signer := jwt.NewSigner(cfg.JWT.Secret, cfg.JWT.TTL)
 	userRepo := repository.NewUserRepo(conn)

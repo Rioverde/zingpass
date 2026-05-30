@@ -1,17 +1,17 @@
 const form = document.getElementById('form');
-const firstname_input = document.getElementById('firstname-input');
+const nickname_input = document.getElementById('nickname-input');
 const email_input = document.getElementById('email-input');
 const password_input = document.getElementById('password-input');
 const repeat_password_input = document.getElementById('repeat-password-input');
 const submit_btn = form.querySelector('button[type="submit"]');
 
-const isSignup = firstname_input !== null;
+const isSignup = nickname_input !== null;
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
   const errors = isSignup
-    ? getSignupFormErrors(firstname_input.value, email_input.value, password_input.value, repeat_password_input.value)
+    ? getSignupFormErrors(nickname_input.value, email_input.value, password_input.value, repeat_password_input.value)
     : getLoginFormErrors(email_input.value, password_input.value);
 
   if (errors.length > 0) {
@@ -23,10 +23,16 @@ form.addEventListener('submit', async (e) => {
 
   try {
     const url = isSignup ? '/auth/register' : '/auth/login';
-    const payload = {
-      email: email_input.value.trim(),
-      password: password_input.value,
-    };
+    const payload = isSignup
+      ? {
+          email: email_input.value.trim(),
+          nickname: nickname_input.value.trim(),
+          password: password_input.value,
+        }
+      : {
+          email: email_input.value.trim(),
+          password: password_input.value,
+        };
 
     const res = await fetch(url, {
       method: 'POST',
@@ -55,12 +61,15 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-function getSignupFormErrors(firstname, email, password, repeatPassword) {
+function getSignupFormErrors(nickname, email, password, repeatPassword) {
   const errors = [];
 
-  if (!firstname) {
-    errors.push('Firstname is required');
-    firstname_input.parentElement.classList.add('incorrect');
+  if (!nickname) {
+    errors.push('Nickname is required');
+    nickname_input.parentElement.classList.add('incorrect');
+  } else if (nickname.length < 3) {
+    errors.push('Nickname must be at least 3 characters');
+    nickname_input.parentElement.classList.add('incorrect');
   }
   if (!email) {
     errors.push('Email is required');
@@ -95,7 +104,7 @@ function getLoginFormErrors(email, password) {
   return errors;
 }
 
-const allInputs = [firstname_input, email_input, password_input, repeat_password_input].filter(Boolean);
+const allInputs = [nickname_input, email_input, password_input, repeat_password_input].filter(Boolean);
 allInputs.forEach((input) => {
   input.addEventListener('input', () => {
     if (input.parentElement.classList.contains('incorrect')) {

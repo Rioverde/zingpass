@@ -26,6 +26,18 @@ func NewRefreshHandler(svc RefreshService, refreshTTL time.Duration, secureCooki
 	return &RefreshHandler{svc: svc, refreshTTL: refreshTTL, secureCookies: secureCookies}
 }
 
+// Refresh godoc
+//
+//	@Summary		Rotate refresh token and issue a new access token
+//	@Description	Reads the refresh token from cookie (browser) or `X-Refresh-Token` header (mobile/API). On success rotates: the old refresh is revoked and replaced by a new one.
+//	@Tags			auth
+//	@Produce		json
+//	@Param			X-Refresh-Token	header		string	false	"Refresh token (alternative to cookie)"
+//	@Success		200				{object}	tokenResponse
+//	@Header			200				{string}	Set-Cookie	"refresh_token=...; HttpOnly; Path=/auth"
+//	@Failure		401				{object}	server.ErrorResponse	"Missing, invalid, expired, or revoked refresh token"
+//	@Failure		500				{object}	server.ErrorResponse
+//	@Router			/auth/refresh [post]
 func (h *RefreshHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	token := extractRefreshToken(r)
 	if token == "" {
@@ -41,12 +53,18 @@ func (h *RefreshHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	setRefreshCookie(w, newRefresh, int(h.refreshTTL/time.Second), h.secureCookies)
 
-	_ = server.WriteJSON(w, http.StatusOK, map[string]string{
-		"token":   access,
-		"refresh": newRefresh,
-	})
+	_ = server.WriteJSON(w, http.StatusOK, tokenResponse{Token: access, Refresh: newRefresh})
 }
 
+// Logout godoc
+//
+//	@Summary		Revoke refresh token and clear cookie
+//	@Description	Idempotent. Always clears the refresh cookie; if a valid token is present, revokes it in storage too.
+//	@Tags			auth
+//	@Param			X-Refresh-Token	header	string	false	"Refresh token (alternative to cookie)"
+//	@Success		204		"No Content"
+//	@Failure		500		{object}	server.ErrorResponse
+//	@Router			/auth/logout [post]
 func (h *RefreshHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	token := extractRefreshToken(r)
 

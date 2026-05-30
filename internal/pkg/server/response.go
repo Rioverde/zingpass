@@ -15,6 +15,17 @@ import (
 
 const maxBodyBytes = 1 << 20 // 1 MiB
 
+// ErrorBody is the inner payload of an API error response.
+type ErrorBody struct {
+	Code    string `json:"code" example:"U0001"`
+	Message string `json:"message" example:"user with this email already exists"`
+}
+
+// ErrorResponse is the JSON envelope for all error responses.
+type ErrorResponse struct {
+	Error ErrorBody `json:"error"`
+}
+
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -26,10 +37,10 @@ func WriteError(w http.ResponseWriter, status int, msg string) {
 }
 
 func WriteAppError(w http.ResponseWriter, e *apperr.Error) {
-	_ = WriteJSON(w, int(e.Status), map[string]any{
-		"error": map[string]any{
-			"code":    e.Code,
-			"message": e.Message,
+	_ = WriteJSON(w, int(e.Status), ErrorResponse{
+		Error: ErrorBody{
+			Code:    string(e.Code),
+			Message: e.Message,
 		},
 	})
 }

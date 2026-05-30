@@ -1,7 +1,7 @@
 COMPOSE      = docker compose
 COMPOSE_ELK  = docker compose -f docker-compose.yaml -f docker-compose.elk.yaml
 
-.PHONY: run all log log-elk restart stop clean psql ps
+.PHONY: run all log log-elk restart stop clean psql ps swag
 
 # Core stack only: storage, zingpass, zingweb
 run:
@@ -33,3 +33,8 @@ psql:
 
 ps:
 	$(COMPOSE_ELK) ps
+
+# Regenerate Swagger docs from handler annotations.
+swag:
+	@command -v $$(go env GOPATH)/bin/swag >/dev/null || go install github.com/swaggo/swag/cmd/swag@latest
+	$$(go env GOPATH)/bin/swag init -g cmd/zingpass/main.go -o docs --parseInternal

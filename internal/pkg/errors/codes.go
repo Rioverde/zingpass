@@ -12,6 +12,7 @@ const (
 	CodeWeakPassword     = "U0007"
 	CodeEmailInvalid     = "U0008"
 	CodePasswordMismatch = "U0009"
+	CodeNicknameTaken    = "U0010"
 )
 
 const (

@@ -17,19 +17,22 @@ import (
 
 const (
 	invalidCreds   = "invalid email or password"
-	alreadyExists  = "user with this email already exists"
+	emailTaken     = "user with this email already exists"
+	nicknameTaken  = "this nickname is already taken"
 	invalidRefresh = "invalid or expired refresh token"
 )
 
 type User struct {
 	ID           string
 	Email        string
+	Nickname     string
 	PasswordHash string
 }
 
 type UserStore interface {
-	CreateUser(ctx context.Context, email, passwordHash string) (id string, err error)
+	CreateUser(ctx context.Context, email, nickname, passwordHash string) (id string, err error)
 	UserByEmail(ctx context.Context, email string) (User, error)
+	UserByNickname(ctx context.Context, nickname string) (User, error)
 }
 
 type AuthService struct {
@@ -43,12 +46,16 @@ func NewAuthService(store UserStore, refresh RefreshTokenStore, signer *jwt.Sign
 	return &AuthService{store: store, refresh: refresh, signer: signer, refreshTTL: refreshTTL}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (string, error) {
-	logger := log.From(ctx).With(zap.String("email", email))
+func (s *AuthService) Register(ctx context.Context, email, nickname, password string) (string, error) {
+	logger := log.From(ctx).With(zap.String("email", email), zap.String("nickname", nickname))
 	logger.Info("register attempt")
 
 	if err := validator.Email(email); err != nil {
 		logger.Warn("register failed: invalid email")
+		return "", err
+	}
+	if err := validator.Nickname(nickname); err != nil {
+		logger.Warn("register failed: invalid nickname")
 		return "", err
 	}
 	if err := validator.Password(password); err != nil {
@@ -56,13 +63,25 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 		return "", err
 	}
 
+	// Email taken?
 	_, err := s.store.UserByEmail(ctx, email)
 	if err == nil {
 		logger.Warn("register failed: email taken")
-		return "", apperr.Conflict(apperr.CodeUserExists, alreadyExists)
+		return "", apperr.Conflict(apperr.CodeUserExists, emailTaken)
 	}
 	if !stderr.Is(err, pgx.ErrNoRows) {
-		logger.Error("register failed: db lookup", zap.Error(err))
+		logger.Error("register failed: email lookup", zap.Error(err))
+		return "", apperr.Internal(err)
+	}
+
+	// Nickname taken?
+	_, err = s.store.UserByNickname(ctx, nickname)
+	if err == nil {
+		logger.Warn("register failed: nickname taken")
+		return "", apperr.Conflict(apperr.CodeNicknameTaken, nicknameTaken)
+	}
+	if !stderr.Is(err, pgx.ErrNoRows) {
+		logger.Error("register failed: nickname lookup", zap.Error(err))
 		return "", apperr.Internal(err)
 	}
 
@@ -72,7 +91,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 		return "", apperr.Internal(err)
 	}
 
-	id, err := s.store.CreateUser(ctx, email, string(hash))
+	id, err := s.store.CreateUser(ctx, email, nickname, string(hash))
 	if err != nil {
 		logger.Error("register failed: db insert", zap.Error(err))
 		return "", apperr.Internal(err)
