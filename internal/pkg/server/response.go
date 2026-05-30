@@ -5,10 +5,12 @@ import (
 	stderr "errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
+	"go.uber.org/zap"
+
 	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
+	"github.com/Rioverde/zingpass/internal/pkg/log"
 )
 
 const maxBodyBytes = 1 << 20 // 1 MiB
@@ -32,17 +34,23 @@ func WriteAppError(w http.ResponseWriter, e *apperr.Error) {
 	})
 }
 
-func RespondErr(w http.ResponseWriter, err error) {
+func RespondErr(w http.ResponseWriter, r *http.Request, err error) {
+	logger := log.From(r.Context())
+
 	var ae *apperr.Error
 	if stderr.As(err, &ae) {
 		if ae.Err != nil {
-			log.Printf("app error: %v", ae.Err)
+			logger.Error("app error",
+				zap.String("code", string(ae.Code)),
+				zap.Int("status", int(ae.Status)),
+				zap.Error(ae.Err),
+			)
 		}
 		WriteAppError(w, ae)
 		return
 	}
 
-	log.Printf("unexpected error: %v", err)
+	logger.Error("unexpected error", zap.Error(err))
 	WriteAppError(w, apperr.Internal(err))
 }
 

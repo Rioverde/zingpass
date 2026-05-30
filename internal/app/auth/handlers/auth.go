@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
 	"github.com/Rioverde/zingpass/internal/pkg/server"
@@ -17,27 +18,29 @@ const (
 
 type AuthService interface {
 	Register(ctx context.Context, email, password string) (userID string, err error)
-	Login(ctx context.Context, email, password string) (token string, err error)
+	Login(ctx context.Context, email, password, userAgent, ip string) (access, refresh string, err error)
 }
 
 type AuthHandler struct {
-	svc AuthService
+	svc           AuthService
+	refreshTTL    time.Duration
+	secureCookies bool
 }
 
-func NewAuthHandler(svc AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func NewAuthHandler(svc AuthService, refreshTTL time.Duration, secureCookies bool) *AuthHandler {
+	return &AuthHandler{svc: svc, refreshTTL: refreshTTL, secureCookies: secureCookies}
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var creds credentials
 	if err := server.DecodeJSON(w, r, &creds); err != nil {
-		server.RespondErr(w, apperr.BadRequest(apperr.CodeMalformedJSON, invalidBody))
+		server.RespondErr(w, r, apperr.BadRequest(apperr.CodeMalformedJSON, invalidBody))
 		return
 	}
 
 	userID, err := h.svc.Register(r.Context(), creds.Email, creds.Password)
 	if err != nil {
-		server.RespondErr(w, err)
+		server.RespondErr(w, r, err)
 		return
 	}
 
@@ -47,26 +50,31 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var creds credentials
 	if err := server.DecodeJSON(w, r, &creds); err != nil {
-		server.RespondErr(w, apperr.BadRequest(apperr.CodeMalformedJSON, invalidBody))
+		server.RespondErr(w, r, apperr.BadRequest(apperr.CodeMalformedJSON, invalidBody))
 		return
 	}
 
 	creds.Email = strings.TrimSpace(strings.ToLower(creds.Email))
 
 	if creds.Email == "" {
-		server.RespondErr(w, apperr.BadRequest(apperr.CodeMissingField, emailRequired))
+		server.RespondErr(w, r, apperr.BadRequest(apperr.CodeMissingField, emailRequired))
 		return
 	}
 	if creds.Password == "" {
-		server.RespondErr(w, apperr.BadRequest(apperr.CodeMissingField, passwordRequired))
+		server.RespondErr(w, r, apperr.BadRequest(apperr.CodeMissingField, passwordRequired))
 		return
 	}
 
-	token, err := h.svc.Login(r.Context(), creds.Email, creds.Password)
+	access, refresh, err := h.svc.Login(r.Context(), creds.Email, creds.Password, r.UserAgent(), r.RemoteAddr)
 	if err != nil {
-		server.RespondErr(w, err)
+		server.RespondErr(w, r, err)
 		return
 	}
 
-	_ = server.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
+	setRefreshCookie(w, refresh, int(h.refreshTTL/time.Second), h.secureCookies)
+
+	_ = server.WriteJSON(w, http.StatusOK, map[string]string{
+		"token":   access,
+		"refresh": refresh,
+	})
 }

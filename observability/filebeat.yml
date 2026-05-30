@@ -1,0 +1,45 @@
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      hints.enabled: true
+      templates:
+        - condition:
+            contains:
+              container.image.name: "zingpass"
+          config:
+            - type: container
+              paths:
+                - /var/lib/docker/containers/${data.container.id}/*.log
+              json.keys_under_root: true
+              json.add_error_key: true
+              json.overwrite_keys: true
+
+processors:
+  - add_docker_metadata: ~
+  - add_host_metadata: ~
+  - drop_fields:
+      fields:
+        [
+          "agent.ephemeral_id",
+          "agent.hostname",
+          "agent.id",
+          "agent.version",
+          "ecs.version",
+          "input.type",
+          "log.offset",
+        ]
+      ignore_missing: true
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "zingpass-logs-%{+yyyy.MM.dd}"
+
+setup.template.name: "zingpass-logs"
+setup.template.pattern: "zingpass-logs-*"
+setup.ilm.enabled: false
+
+setup.kibana:
+  host: "kibana:5601"
+
+logging.level: info
+logging.to_files: false

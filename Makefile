@@ -1,19 +1,35 @@
-.PHONY: run log restart stop clean psql
+COMPOSE      = docker compose
+COMPOSE_ELK  = docker compose -f docker-compose.yaml -f docker-compose.elk.yaml
 
+.PHONY: run all log log-elk restart stop clean psql ps
+
+# Core stack only: storage, zingpass, zingweb
 run:
-	docker compose up --build -d
+	$(COMPOSE) up --build -d
+
+# Everything: core + Elasticsearch + Kibana + Filebeat
+all:
+	$(COMPOSE_ELK) up --build -d
 
 log:
-	docker compose logs -f zingpass
+	$(COMPOSE) logs -f zingpass
+
+log-elk:
+	$(COMPOSE_ELK) logs -f filebeat elasticsearch kibana
 
 restart:
-	docker compose restart zingpass
+	$(COMPOSE) restart zingpass
 
+# Stop EVERYTHING (works for both `run` and `all`)
 stop:
-	docker compose down
+	$(COMPOSE_ELK) down
 
+# Stop everything and wipe volumes (DB, ES data)
 clean:
-	docker compose down -v
+	$(COMPOSE_ELK) down -v
 
 psql:
-	docker compose exec storage psql -U zingpass -d zingpass
+	$(COMPOSE) exec storage psql -U zingpass -d zingpass
+
+ps:
+	$(COMPOSE_ELK) ps

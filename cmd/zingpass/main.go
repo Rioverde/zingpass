@@ -47,7 +47,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.ClientIPFromRemoteAddr)
-	r.Use(middleware.Logger)
+	r.Use(server.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -58,12 +58,18 @@ func main() {
 
 	signer := jwt.NewSigner(cfg.JWT.Secret, cfg.JWT.TTL)
 	userRepo := repository.NewUserRepo(conn)
-	authSvc := services.NewAuthService(userRepo, signer)
-	authHandler := handlers.NewAuthHandler(authSvc)
+	refreshRepo := repository.NewRefreshRepo(conn)
+	authSvc := services.NewAuthService(userRepo, refreshRepo, signer, cfg.JWT.RefreshTTL)
+
+	secureCookies := cfg.Env.IsProd()
+	authHandler := handlers.NewAuthHandler(authSvc, cfg.JWT.RefreshTTL, secureCookies)
+	refreshHandler := handlers.NewRefreshHandler(authSvc, cfg.JWT.RefreshTTL, secureCookies)
 
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/login", authHandler.Login)
 		r.Post("/register", authHandler.Register)
+		r.Post("/login", authHandler.Login)
+		r.Post("/refresh", refreshHandler.Refresh)
+		r.Post("/logout", refreshHandler.Logout)
 	})
 
 	logger.Info("Starting http server", zap.String("addr", cfg.HTTP.Addr), zap.String("env", string(cfg.Env)))

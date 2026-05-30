@@ -37,8 +37,9 @@ type DB struct {
 }
 
 type JWT struct {
-	Secret []byte
-	TTL    time.Duration
+	Secret     []byte
+	TTL        time.Duration
+	RefreshTTL time.Duration
 }
 
 func Load() (*Config, error) {
@@ -65,8 +66,9 @@ func Load() (*Config, error) {
 			Name:     env("STORAGE_DB_NAME", "zingpass"),
 		},
 		JWT: JWT{
-			Secret: []byte(secret),
-			TTL:    envDuration("JWT_TTL", time.Hour),
+			Secret:     []byte(secret),
+			TTL:        envDuration("JWT_TTL", 15*time.Minute),
+			RefreshTTL: envDuration("REFRESH_TTL", 7*24*time.Hour),
 		},
 	}, nil
 }

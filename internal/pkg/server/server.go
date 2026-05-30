@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
 )
@@ -19,7 +18,6 @@ func StartHTTP(ctx context.Context, addr string, h http.Handler) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
