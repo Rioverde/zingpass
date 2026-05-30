@@ -65,7 +65,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, refresh, err := h.svc.Login(r.Context(), creds.Email, creds.Password, r.UserAgent(), r.RemoteAddr)
+	access, refresh, err := h.svc.Login(r.Context(), creds.Email, creds.Password, r.UserAgent(), clientIP(r))
 	if err != nil {
 		server.RespondErr(w, r, err)
 		return

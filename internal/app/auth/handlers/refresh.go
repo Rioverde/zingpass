@@ -33,7 +33,7 @@ func (h *RefreshHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, newRefresh, err := h.svc.Refresh(r.Context(), token, r.UserAgent(), r.RemoteAddr)
+	access, newRefresh, err := h.svc.Refresh(r.Context(), token, r.UserAgent(), clientIP(r))
 	if err != nil {
 		server.RespondErr(w, r, err)
 		return

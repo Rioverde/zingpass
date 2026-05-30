@@ -4,54 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Zingpass</title>
-  <link rel="stylesheet" href="style.css">
-
-  <style>
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .wrapper {
-      box-sizing: border-box;
-      background-color: var(--base-color);
-      width: min(560px, 90%);
-      height: auto;
-      padding: 40px;
-      border-radius: 20px;
-      text-align: center;
-    }
-    h1 {
-      font-size: 2rem;
-      margin-bottom: 12px;
-    }
-    .hello {
-      color: var(--placeholder-color);
-      font-size: 1rem;
-      margin-bottom: 32px;
-    }
-    button {
-      margin-top: 10px;
-      border: none;
-      border-radius: 1000px;
-      padding: .85em 4em;
-      background-color: var(--accent-color);
-      color: var(--text-color);
-      font: inherit;
-      font-weight: 600;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: 150ms ease;
-    }
-    button:hover {
-      background-color: var(--text-color);
-      color: var(--base-color);
-    }
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-  </style>
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <script src="/assets/js/toast.js" defer></script>
+  <script src="/assets/js/dashboard.js" defer></script>
 </head>
 <body>
   <div class="wrapper">
@@ -61,39 +17,5 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <script>
-    // Guard: no access token → bounce to login.
-    if (!sessionStorage.getItem('token')) {
-      window.location.href = '/login/';
-    }
-
-    const toast = document.getElementById('toast');
-    const logoutBtn = document.getElementById('logoutBtn');
-    let toastTimer;
-
-    function showToast(message, type) {
-      toast.textContent = message;
-      toast.className = 'toast show' + (type ? ' ' + type : '');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
-    }
-
-    logoutBtn.addEventListener('click', async () => {
-      logoutBtn.disabled = true;
-
-      try {
-        // Browser will attach refresh cookie automatically.
-        // Mobile/JS-only client could also send X-Refresh-Token header.
-        await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      } catch (err) {
-        // Network failure — keep going; client-side cleanup still matters.
-      } finally {
-        sessionStorage.removeItem('token');
-        showToast('Logged out. Redirecting…', 'success');
-        setTimeout(() => { window.location.href = '/login/'; }, 600);
-      }
-    });
-  </script>
 </body>
 </html>

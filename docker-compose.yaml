@@ -33,7 +33,7 @@ services:
     image: nginx:1.27-alpine
     restart: on-failure
     volumes:
-      - ./web/login:/usr/share/nginx/html:ro
+      - ./web:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8081:80"

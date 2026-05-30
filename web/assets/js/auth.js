@@ -4,17 +4,8 @@ const email_input = document.getElementById('email-input');
 const password_input = document.getElementById('password-input');
 const repeat_password_input = document.getElementById('repeat-password-input');
 const submit_btn = form.querySelector('button[type="submit"]');
-const toast = document.getElementById('toast');
 
 const isSignup = firstname_input !== null;
-let toastTimer;
-
-function showToast(message, type) {
-  toast.textContent = message;
-  toast.className = 'toast show' + (type ? ' ' + type : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
-}
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -48,11 +39,11 @@ form.addEventListener('submit', async (e) => {
     if (res.ok) {
       if (isSignup) {
         showToast('Account created. Redirecting…', 'success');
-        setTimeout(() => { window.location.href = '/login/'; }, 1200);
+        setTimeout(() => { window.location.href = '/login'; }, 1200);
       } else {
         if (body.token) sessionStorage.setItem('token', body.token);
         showToast('Logged in. Redirecting…', 'success');
-        setTimeout(() => { window.location.href = '/login/dashboard.html'; }, 800);
+        setTimeout(() => { window.location.href = '/dashboard'; }, 800);
       }
     } else {
       showToast((body.error && body.error.message) || 'Request failed', 'error');
