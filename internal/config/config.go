@@ -18,10 +18,12 @@ func (e Env) IsProd() bool { return e == EnvProd }
 func (e Env) IsDev() bool  { return e == EnvDev }
 
 type Config struct {
-	Env  Env
-	HTTP HTTP
-	DB   DB
-	JWT  JWT
+	Env   Env
+	HTTP  HTTP
+	DB    DB
+	JWT   JWT
+	Redis Redis
+	OAuth OAuth
 }
 
 type HTTP struct {
@@ -40,6 +42,18 @@ type JWT struct {
 	Secret     []byte
 	TTL        time.Duration
 	RefreshTTL time.Duration
+}
+
+type Redis struct {
+	Addr     string // host:port
+	Password string
+	DB       int
+}
+
+type OAuth struct {
+	GithubClientID     string
+	GithubClientSecret string
+	GithubRedirectURL  string
 }
 
 func Load() (*Config, error) {
@@ -70,7 +84,29 @@ func Load() (*Config, error) {
 			TTL:        envDuration("JWT_TTL", 15*time.Minute),
 			RefreshTTL: envDuration("REFRESH_TTL", 7*24*time.Hour),
 		},
+		Redis: Redis{
+			Addr:     env("REDIS_ADDR", "localhost:6379"),
+			Password: os.Getenv("REDIS_PASSWORD"),
+			DB:       envInt("REDIS_DB", 0),
+		},
+		OAuth: OAuth{
+			GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+			GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+			GithubRedirectURL:  env("GITHUB_REDIRECT_URL", "http://localhost:8081/auth/github/callback"),
+		},
 	}, nil
+}
+
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil {
+		return fallback
+	}
+	return n
 }
 
 func parseEnv(v string) Env {

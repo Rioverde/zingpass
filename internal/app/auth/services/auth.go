@@ -7,8 +7,10 @@ import (
 
 	"github.com/jackc/pgx/v4"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 
+	"github.com/Rioverde/zingpass/internal/app/auth/models"
+	"github.com/Rioverde/zingpass/internal/pkg/crypto"
 	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
 	"github.com/Rioverde/zingpass/internal/pkg/jwt"
 	"github.com/Rioverde/zingpass/internal/pkg/log"
@@ -22,30 +24,51 @@ const (
 	invalidRefresh = "invalid or expired refresh token"
 )
 
-type User struct {
-	ID           string
-	Email        string
-	Nickname     string
-	PasswordHash string
-}
-
-type UserStore interface {
+// UserProvider defines the contract for user persistence. AuthService depends on this interface
+// rather than concrete storage implementations, enabling testability and pluggable backends.
+type UserProvider interface {
 	CreateUser(ctx context.Context, email, nickname, passwordHash string) (id string, err error)
-	UserByEmail(ctx context.Context, email string) (User, error)
-	UserByNickname(ctx context.Context, nickname string) (User, error)
+	UserByEmail(ctx context.Context, email string) (models.User, error)
+	UserByNickname(ctx context.Context, nickname string) (models.User, error)
 }
 
+// AuthService is the core business logic for authentication and authorization.
+// It orchestrates user registration, login, token refresh, logout, and OAuth flows
+// through pluggable provider interfaces, ensuring the service remains testable and decoupled
+// from storage implementation details.
 type AuthService struct {
-	store      UserStore
-	refresh    RefreshTokenStore
-	signer     *jwt.Signer
-	refreshTTL time.Duration
+	store        UserProvider
+	refresh      RefreshTokenProvider
+	signer       *jwt.Signer
+	refreshTTL   time.Duration
+	oauth        OAuthAccountStore
+	githubConfig *oauth2.Config
 }
 
-func NewAuthService(store UserStore, refresh RefreshTokenStore, signer *jwt.Signer, refreshTTL time.Duration) *AuthService {
-	return &AuthService{store: store, refresh: refresh, signer: signer, refreshTTL: refreshTTL}
+// NewAuthService constructs an AuthService with the given provider implementations and configuration.
+// All providers are required and should not be nil.
+func NewAuthService(
+	store UserProvider,
+	refresh RefreshTokenProvider,
+	oauth OAuthAccountStore,
+	githubConfig *oauth2.Config,
+	signer *jwt.Signer,
+	refreshTTL time.Duration,
+) *AuthService {
+	return &AuthService{
+		store:        store,
+		refresh:      refresh,
+		oauth:        oauth,
+		githubConfig: githubConfig,
+		signer:       signer,
+		refreshTTL:   refreshTTL,
+	}
 }
 
+// Register creates a new local user account with the given credentials.
+// It validates email format, nickname format, and password strength before querying the database,
+// avoiding wasted lookups on invalid input. Both email and nickname must be globally unique.
+// The password is hashed using bcrypt before storage. Returns the created user ID or an error.
 func (s *AuthService) Register(ctx context.Context, email, nickname, password string) (string, error) {
 	logger := log.From(ctx).With(zap.String("email", email), zap.String("nickname", nickname))
 	logger.Info("register attempt")
@@ -85,13 +108,13 @@ func (s *AuthService) Register(ctx context.Context, email, nickname, password st
 		return "", apperr.Internal(err)
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		logger.Error("register failed: encryption", zap.Error(err))
 		return "", apperr.Internal(err)
 	}
 
-	id, err := s.store.CreateUser(ctx, email, nickname, string(hash))
+	id, err := s.store.CreateUser(ctx, email, nickname, hash)
 	if err != nil {
 		logger.Error("register failed: db insert", zap.Error(err))
 		return "", apperr.Internal(err)
@@ -101,6 +124,10 @@ func (s *AuthService) Register(ctx context.Context, email, nickname, password st
 	return id, nil
 }
 
+// Login authenticates a user by email and password, returning an access token and refresh token.
+// Returns the same generic error ("invalid email or password") whether the user does not exist or
+// the password is wrong, preventing attackers from enumerating valid email addresses in the system.
+// On success, issues a new access JWT and persists a refresh token row.
 func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip string) (access, refresh string, err error) {
 	logger := log.From(ctx).With(zap.String("email", email), zap.String("ip", ip))
 	logger.Info("login attempt")
@@ -117,7 +144,7 @@ func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip 
 
 	logger = logger.With(zap.String("user_id", user.ID))
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := crypto.ComparePassword(user.PasswordHash, password); err != nil {
 		logger.Warn("login failed: wrong password")
 		return "", "", apperr.Unauthorized(apperr.CodeInvalidCreds, invalidCreds)
 	}

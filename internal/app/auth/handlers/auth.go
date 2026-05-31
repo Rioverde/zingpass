@@ -16,21 +16,30 @@ const (
 	passwordRequired = "password is required"
 )
 
+// AuthService defines the business logic for user registration and login.
 type AuthService interface {
 	Register(ctx context.Context, email, nickname, password string) (userID string, err error)
 	Login(ctx context.Context, email, password, userAgent, ip string) (access, refresh string, err error)
 }
 
+// AuthHandler is the HTTP layer for authentication endpoints.
+// It provides a thin translation between JSON request/response and service calls,
+// delegating all business logic to AuthService.
 type AuthHandler struct {
 	svc           AuthService
 	refreshTTL    time.Duration
 	secureCookies bool
 }
 
+// NewAuthHandler creates a new AuthHandler with the given service and configuration.
 func NewAuthHandler(svc AuthService, refreshTTL time.Duration, secureCookies bool) *AuthHandler {
 	return &AuthHandler{svc: svc, refreshTTL: refreshTTL, secureCookies: secureCookies}
 }
 
+// Register creates a new user account.
+// It validates the request body, normalizes email and nickname, delegates to the service layer
+// to handle password hashing and uniqueness checks, and returns the created user ID.
+//
 // Register godoc
 //
 //	@Summary		Create a new user account
@@ -63,6 +72,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	_ = server.WriteJSON(w, http.StatusCreated, userIDResponse{UserID: userID})
 }
 
+// Login authenticates a user and issues tokens.
+// It verifies credentials against the service, receives a short-lived access JWT and a long-lived
+// refresh token, sets the refresh token as a secure httpOnly cookie (for browser use), and returns
+// both tokens in the response body (mobile/API clients also get refresh in the X-Refresh-Token header).
+//
 // Login godoc
 //
 //	@Summary		Authenticate and issue tokens
@@ -95,7 +109,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, refresh, err := h.svc.Login(r.Context(), creds.Email, creds.Password, r.UserAgent(), clientIP(r))
+	access, refresh, err := h.svc.Login(r.Context(), creds.Email, creds.Password, r.UserAgent(), server.ClientIP(r))
 	if err != nil {
 		server.RespondErr(w, r, err)
 		return

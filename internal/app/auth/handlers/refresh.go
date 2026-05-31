@@ -11,21 +11,31 @@ import (
 
 const invalidRefresh = "invalid refresh token"
 
+// RefreshService defines the business logic for token refresh and logout.
 type RefreshService interface {
 	Refresh(ctx context.Context, refreshToken, userAgent, ip string) (accessToken, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string) error
 }
 
+// RefreshHandler is the HTTP layer for token refresh and logout endpoints.
+// It decouples the two token sources (browser cookies and mobile headers), handles secure refresh
+// cookie management, and provides an idempotent logout mechanism.
 type RefreshHandler struct {
 	svc           RefreshService
 	refreshTTL    time.Duration
 	secureCookies bool
 }
 
+// NewRefreshHandler creates a new RefreshHandler with the given service and configuration.
 func NewRefreshHandler(svc RefreshService, refreshTTL time.Duration, secureCookies bool) *RefreshHandler {
 	return &RefreshHandler{svc: svc, refreshTTL: refreshTTL, secureCookies: secureCookies}
 }
 
+// Refresh rotates the refresh token and issues a new access token.
+// The refresh token is read from either the httpOnly cookie (browser) or the X-Refresh-Token header
+// (mobile/API clients), supporting both client types without forcing a single transport mechanism.
+// On success, the old refresh token is revoked in the service and a new one is issued and set as a cookie.
+//
 // Refresh godoc
 //
 //	@Summary		Rotate refresh token and issue a new access token
@@ -45,7 +55,7 @@ func (h *RefreshHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, newRefresh, err := h.svc.Refresh(r.Context(), token, r.UserAgent(), clientIP(r))
+	access, newRefresh, err := h.svc.Refresh(r.Context(), token, r.UserAgent(), server.ClientIP(r))
 	if err != nil {
 		server.RespondErr(w, r, err)
 		return
@@ -56,6 +66,11 @@ func (h *RefreshHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	_ = server.WriteJSON(w, http.StatusOK, tokenResponse{Token: access, Refresh: newRefresh})
 }
 
+// Logout revokes the refresh token and clears its cookie.
+// Designed to be idempotent: the cookie is always cleared regardless of whether a token is present,
+// and if a token exists, it is revoked in storage. This ensures clients can safely log out without
+// worrying about missing or mismatched tokens.
+//
 // Logout godoc
 //
 //	@Summary		Revoke refresh token and clear cookie
@@ -85,7 +100,9 @@ func (h *RefreshHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// extractRefreshToken reads refresh token from header (mobile) or cookie (browser).
+// extractRefreshToken retrieves the refresh token from either the X-Refresh-Token header (mobile/API)
+// or the httpOnly cookie (browser), preferring the header if both are present. This flexibility
+// allows the same endpoint to serve multiple client types without requiring separate routes.
 func extractRefreshToken(r *http.Request) string {
 	if header := r.Header.Get("X-Refresh-Token"); header != "" {
 		return header
