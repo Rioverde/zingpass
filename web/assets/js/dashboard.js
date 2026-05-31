@@ -1,3 +1,13 @@
+// After OAuth callback the backend hands the access token over in a 1-minute,
+// non-httpOnly cookie. Lift it into sessionStorage and erase the cookie so it
+// is never read or sent again.
+(function pickupOAuthAccess() {
+  const m = document.cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
+  if (!m) return;
+  sessionStorage.setItem('token', decodeURIComponent(m[1]));
+  document.cookie = 'access_token=; Path=/; Max-Age=-1; SameSite=Lax';
+})();
+
 // Guard: no access token → bounce to login.
 if (!sessionStorage.getItem('token')) {
   window.location.href = '/login';

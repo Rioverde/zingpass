@@ -22,6 +22,8 @@ type RefreshTokenProvider interface {
 	Revoke(ctx context.Context, id string) error
 	RevokeAllForUser(ctx context.Context, userID string) error
 	MarkReplaced(ctx context.Context, oldID, newID string) error
+	// Rotate atomically inserts a new refresh row and marks oldID as replaced by it.
+	Rotate(ctx context.Context, oldID, userID, newTokenHash string, expiresAt time.Time, userAgent, ip string) (newID string, err error)
 }
 
 // Refresh rotates a refresh token to issue a new access-refresh pair.
@@ -70,16 +72,27 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken, userAgent, ip s
 		return "", "", apperr.Unauthorized(apperr.CodeTokenExpired, invalidRefresh)
 	}
 
-	// Issue a new pair (this also persists the new refresh row first).
-	access, newRefresh, newID, err := s.issueTokens(ctx, row.UserID, "", userAgent, ip)
+	// Generate the new refresh token.
+	newRefresh, err = crypto.RandomHex(32)
 	if err != nil {
-		logger.Error("refresh failed: issue tokens", zap.Error(err))
-		return "", "", err
+		logger.Error("refresh failed: random source unavailable", zap.Error(err))
+		return "", "", apperr.Internal(err)
 	}
 
-	// Rotate: mark the old token as replaced by the new one.
-	if err := s.refresh.MarkReplaced(ctx, row.ID, newID); err != nil {
-		logger.Error("refresh failed: mark replaced", zap.Error(err))
+	// Atomically insert the new row and mark the old one as replaced.
+	// Either both happen or neither — no window in which old stays unrevoked.
+	if _, err := s.refresh.Rotate(
+		ctx, row.ID, row.UserID, crypto.HashToken(newRefresh),
+		time.Now().Add(s.refreshTTL), userAgent, ip,
+	); err != nil {
+		logger.Error("refresh failed: rotate", zap.Error(err))
+		return "", "", apperr.Internal(err)
+	}
+
+	// Mint a fresh access JWT.
+	access, err = s.signer.Sign(row.UserID, "")
+	if err != nil {
+		logger.Error("refresh failed: sign access token", zap.Error(err))
 		return "", "", apperr.Internal(err)
 	}
 

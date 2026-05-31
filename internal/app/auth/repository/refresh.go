@@ -88,13 +88,51 @@ func (r *RefreshRepo) RevokeAllForUser(ctx context.Context, userID string) error
 }
 
 // MarkReplaced marks an old token as replaced by a new one and revokes it atomically.
-// This implements token rotation: the old token's replaced_by is set to newID and
-// revoked_at is set to NOW() in a single atomic update. Parameter order is critical:
-// $1 is oldID (the WHERE clause target) and $2 is newID (the replaced_by value).
+// Prefer Rotate when both inserting a new token and marking the old one — Rotate runs
+// both statements in a single Postgres transaction, eliminating the brief window in
+// which Refresh could leave the old token live if the process died after Create.
 func (r *RefreshRepo) MarkReplaced(ctx context.Context, oldID, newID string) error {
 	_, err := r.conn.Pool().Exec(ctx,
 		`UPDATE refresh_tokens SET replaced_by = $2, revoked_at = NOW() WHERE id = $1`,
 		oldID, newID,
 	)
 	return err
+}
+
+// Rotate inserts a new refresh token and marks oldID as replaced by it, all in a
+// single transaction. Either both rows are committed or neither is — a crash mid-flight
+// will not leave the old token unrevoked. Returns the id of the newly created row.
+func (r *RefreshRepo) Rotate(
+	ctx context.Context,
+	oldID, userID, newTokenHash string,
+	expiresAt time.Time,
+	userAgent, ip string,
+) (string, error) {
+	tx, err := r.conn.Pool().Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx) // safe to call after Commit — it becomes a no-op.
+
+	var newID string
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id`,
+		userID, newTokenHash, expiresAt, userAgent, ip,
+	).Scan(&newID); err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE refresh_tokens SET replaced_by = $2, revoked_at = NOW() WHERE id = $1`,
+		oldID, newID,
+	); err != nil {
+		return "", err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return newID, nil
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	stderr "errors"
 	"net/http"
 	"time"
 
@@ -96,27 +97,32 @@ func (h *OAuthHandler) GithubCallback(w http.ResponseWriter, r *http.Request) {
 
 	// GitHub may have signalled refusal.
 	if errMsg := q.Get("error"); errMsg != "" {
-		http.Redirect(w, r, "/login?error=oauth_denied", http.StatusFound)
+		redirectLoginError(w, r, apperr.CodeOAuthCancelled)
 		return
 	}
 
 	code := q.Get("code")
 	state := q.Get("state")
 	if code == "" || state == "" {
-		http.Redirect(w, r, "/login?error=oauth_invalid_callback", http.StatusFound)
+		redirectLoginError(w, r, apperr.CodeOAuthCallback)
 		return
 	}
 
 	// CSRF check — state from URL must match the cookie we set in LoginViaGithub.
 	cookie, err := r.Cookie(oauthStateCookieName)
 	if err != nil || cookie.Value != state {
-		http.Redirect(w, r, "/login?error=oauth_state_mismatch", http.StatusFound)
+		redirectLoginError(w, r, apperr.CodeOAuthStateMismatch)
 		return
 	}
 
 	access, refresh, err := h.svc.LoginViaGithub(r.Context(), code, r.UserAgent(), server.ClientIP(r))
 	if err != nil {
-		http.Redirect(w, r, "/login?error=oauth_failed", http.StatusFound)
+		var e *apperr.Error
+		if stderr.As(err, &e) {
+			redirectLoginError(w, r, string(e.Code))
+		} else {
+			redirectLoginError(w, r, apperr.CodeInternal)
+		}
 		return
 	}
 
@@ -136,4 +142,10 @@ func (h *OAuthHandler) GithubCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// redirectLoginError sends the user back to /login with ?error=<code> so the
+// frontend can show a tailored message. The code is one of apperr's typed codes.
+func redirectLoginError(w http.ResponseWriter, r *http.Request, code string) {
+	http.Redirect(w, r, "/login?error="+code, http.StatusFound)
 }

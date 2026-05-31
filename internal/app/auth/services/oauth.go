@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	stderr "errors"
+	"net/http"
 	"strconv"
 
 	"github.com/jackc/pgx/v4"
@@ -13,6 +14,12 @@ import (
 	"github.com/Rioverde/zingpass/internal/pkg/crypto"
 	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
 	"github.com/Rioverde/zingpass/internal/pkg/log"
+)
+
+// GitHub REST API endpoints used by the service.
+const (
+	githubUserURL   = "https://api.github.com/user"
+	githubEmailsURL = "https://api.github.com/user/emails"
 )
 
 // githubUser represents the GitHub user response from GET /user.
@@ -68,7 +75,7 @@ func (s *AuthService) LoginViaGithub(ctx context.Context, code, userAgent, ip st
 
 	// Fetch github user
 	client := s.githubConfig.Client(ctx, token)
-	resp, err := client.Get("https://api.github.com/user")
+	resp, err := client.Get(githubUserURL)
 	if err != nil {
 		logger.Error("oauth login failed: github api unreachable", zap.Error(err))
 		return "", "", apperr.Internal(err)
@@ -82,10 +89,16 @@ func (s *AuthService) LoginViaGithub(ctx context.Context, code, userAgent, ip st
 	}
 
 	if gh.Email == "" {
-		// GitHub user hid their email. To support these users we'd need to call
-		// GET /user/emails and pick a verified primary. For now reject.
-		logger.Warn("oauth login failed: github email missing")
-		return "", "", apperr.BadRequest(apperr.CodeMissingField, "github email is required (make your email public or use email signup)")
+		// Public email is hidden; fall back to the user:email scoped endpoint.
+		gh.Email, err = fetchGithubPrimaryEmail(client)
+		if err != nil {
+			logger.Error("oauth login failed: fetch github emails", zap.Error(err))
+			return "", "", apperr.Internal(err)
+		}
+		if gh.Email == "" {
+			logger.Warn("oauth login failed: no verified primary email on github")
+			return "", "", apperr.BadRequest(apperr.CodeGithubEmailMissing, "no verified primary email on github")
+		}
 	}
 
 	githubID := strconv.FormatInt(gh.ID, 10)
@@ -149,4 +162,30 @@ func (s *AuthService) LoginViaGithub(ctx context.Context, code, userAgent, ip st
 
 	logger.Info("oauth login success", zap.String("user_id", userID))
 	return access, refresh, nil
+}
+
+// fetchGithubPrimaryEmail calls GET /user/emails and returns the verified primary email.
+// Requires the user:email scope. Returns "" if no email is both primary and verified.
+func fetchGithubPrimaryEmail(client *http.Client) (string, error) {
+	resp, err := client.Get(githubEmailsURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
+		return "", err
+	}
+
+	for _, e := range emails {
+		if e.Primary && e.Verified {
+			return e.Email, nil
+		}
+	}
+	return "", nil
 }

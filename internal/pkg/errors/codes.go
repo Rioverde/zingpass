@@ -41,6 +41,13 @@ const (
 )
 
 const (
+	CodeGithubEmailMissing = "OA0001"
+	CodeOAuthCancelled     = "OA0002"
+	CodeOAuthStateMismatch = "OA0003"
+	CodeOAuthCallback      = "OA0004"
+)
+
+const (
 	CodeInternal           = "S0001"
 	CodeServiceUnavailable = "S0002"
 	CodeDatabaseError      = "S0003"

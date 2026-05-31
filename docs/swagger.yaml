@@ -58,6 +58,43 @@ info:
   title: Zingpass API
   version: "1.0"
 paths:
+  /auth/github:
+    get:
+      description: Generates a CSRF state, stores it in a short-lived cookie, and
+        redirects the user to GitHub.
+      responses:
+        "302":
+          description: Redirect to github.com
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Start GitHub OAuth login
+      tags:
+      - auth
+  /auth/github/callback:
+    get:
+      description: Verifies state, exchanges code for tokens, sets refresh cookie,
+        and redirects to the dashboard.
+      parameters:
+      - description: Authorization code from GitHub
+        in: query
+        name: code
+        type: string
+      - description: CSRF state echoed by GitHub
+        in: query
+        name: state
+        type: string
+      - description: Error code if user denied access
+        in: query
+        name: error
+        type: string
+      responses:
+        "302":
+          description: Redirect to /dashboard on success, /login on failure
+      summary: Handle GitHub OAuth callback
+      tags:
+      - auth
   /auth/login:
     post:
       consumes:

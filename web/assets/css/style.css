@@ -167,3 +167,49 @@ form button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
 .toast.error{ border-left-color: #f06272; }
 .toast.success{ border-left-color: #4caf50; }
 
+
+/* OAuth providers */
+.oauth-divider{
+  width: min(400px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px auto 16px;
+  color: var(--placeholder-color);
+  font-size: 0.85rem;
+}
+.oauth-divider::before,
+.oauth-divider::after{
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--input-color);
+}
+.oauth-btn{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(400px, 100%);
+  margin: 0 auto 24px;
+  padding: .75em 1em;
+  border: 1px solid var(--input-color);
+  border-radius: 1000px;
+  background-color: var(--input-color);
+  color: var(--text-color);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: 150ms ease;
+}
+.oauth-btn:hover{
+  border-color: var(--accent-color);
+  background-color: transparent;
+}
+.oauth-btn__icon{
+  width: 20px;
+  height: 20px;
+  /* Source svg is dark; invert for our dark-theme text. */
+  filter: invert(1);
+}

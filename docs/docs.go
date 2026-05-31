@@ -15,6 +15,60 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/github": {
+            "get": {
+                "description": "Generates a CSRF state, stores it in a short-lived cookie, and redirects the user to GitHub.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Start GitHub OAuth login",
+                "responses": {
+                    "302": {
+                        "description": "Redirect to github.com"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/github/callback": {
+            "get": {
+                "description": "Verifies state, exchanges code for tokens, sets refresh cookie, and redirects to the dashboard.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Handle GitHub OAuth callback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Authorization code from GitHub",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF state echoed by GitHub",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Error code if user denied access",
+                        "name": "error",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to /dashboard on success, /login on failure"
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "description": "Verifies email/password and returns a short-lived access JWT plus a long-lived refresh token. Refresh is also set as an httpOnly cookie for browser clients.",

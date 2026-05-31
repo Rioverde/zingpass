@@ -1,3 +1,39 @@
+// Surface OAuth callback failures sent as ?error=...
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('error');
+  if (!code) return;
+
+  const messages = {
+    // Legacy aliases (in case anything still emits these).
+    oauth_denied: 'GitHub login was cancelled.',
+    oauth_invalid_callback: 'Login failed: invalid callback.',
+    oauth_state_mismatch: 'Login failed: security check did not match. Please try again.',
+    oauth_failed: 'GitHub login failed. Please try again.',
+
+    // Typed application codes from the backend.
+    OA0001: 'Your GitHub email is private. Make it public in GitHub settings (Profile → Public email) and try again.',
+    OA0002: 'GitHub login was cancelled.',
+    OA0003: 'Security check failed — please try again.',
+    OA0004: 'Invalid callback from GitHub. Try again.',
+    U0001:  'A user with this email already exists.',
+    U0010:  'This nickname is already taken.',
+    S0001:  'Something went wrong on our side. Please try again.',
+  };
+
+  // Wait one tick so toast.js has bound window.showToast.
+  setTimeout(() => {
+    if (typeof showToast === 'function') {
+      showToast(messages[code] || 'Login failed', 'error');
+    }
+  }, 0);
+
+  // Clean the URL so a refresh doesn't re-show the toast.
+  const url = new URL(window.location.href);
+  url.searchParams.delete('error');
+  window.history.replaceState({}, '', url);
+})();
+
 const form = document.getElementById('form');
 const nickname_input = document.getElementById('nickname-input');
 const email_input = document.getElementById('email-input');
