@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-redis/redis_rate/v10"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
@@ -74,9 +75,12 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.ClientIPFromRemoteAddr)
+	r.Use(server.Metrics)
 	r.Use(server.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(server.RateLimit(rateLimiter, redis_rate.PerMinute(100)))
+
+	r.Handle("/metrics", promhttp.Handler())
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte("Welcome")); err != nil {

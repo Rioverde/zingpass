@@ -38,3 +38,15 @@
         href: http://localhost:8025
         description: Outgoing emails (SMTP catcher)
         icon: si-maildotru
+    - Grafana:
+        href: http://localhost:3000
+        description: "Metrics dashboards — admin / admin"
+        icon: si-grafana
+    - Prometheus:
+        href: http://localhost:9090
+        description: Metrics scrape + query
+        icon: si-prometheus
+    - cAdvisor:
+        href: http://localhost:8093
+        description: CPU/RAM per container
+        icon: si-docker
