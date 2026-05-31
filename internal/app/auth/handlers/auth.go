@@ -14,6 +14,7 @@ const (
 	invalidBody      = "invalid request body"
 	emailRequired    = "email is required"
 	passwordRequired = "password is required"
+	tokenRequired    = "token is required"
 )
 
 // AuthService defines the business logic for user registration and login.

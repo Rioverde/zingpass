@@ -45,7 +45,7 @@ services:
     user: root
     command: ["filebeat", "-e", "-strict.perms=false"]
     volumes:
-      - ./observability/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./config/observability/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - filebeat_data:/usr/share/filebeat/data

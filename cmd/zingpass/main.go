@@ -24,6 +24,7 @@ import (
 	"github.com/Rioverde/zingpass/internal/pkg/db"
 	"github.com/Rioverde/zingpass/internal/pkg/jwt"
 	"github.com/Rioverde/zingpass/internal/pkg/log"
+	"github.com/Rioverde/zingpass/internal/pkg/mailer"
 	"github.com/Rioverde/zingpass/internal/pkg/server"
 
 	_ "github.com/Rioverde/zingpass/docs" // swagger spec
@@ -100,16 +101,34 @@ func main() {
 	userRepo := repository.NewUserRepo(conn)
 	refreshRepo := repository.NewRefreshRepo(conn)
 	oauthRepo := repository.NewOAuthRepo(conn)
+	verificationRepo := repository.NewVerificationRepo(conn)
+	passwordResetRepo := repository.NewPasswordResetRepo(conn)
+
+	smtpMailer, err := mailer.NewSMTP(mailer.SMTPConfig{
+		Host: cfg.Mail.Host,
+		Port: cfg.Mail.Port,
+		User: cfg.Mail.User,
+		Pass: cfg.Mail.Pass,
+		From: cfg.Mail.From,
+	})
+	if err != nil {
+		logger.Fatal("mailer init failed", zap.Error(err))
+	}
 
 	authSvc := services.NewAuthService(
-		userRepo, refreshRepo, oauthRepo, githubConfig,
+		userRepo, refreshRepo, oauthRepo, verificationRepo, passwordResetRepo,
+		githubConfig, smtpMailer,
 		signer, cfg.JWT.RefreshTTL,
+		cfg.Mail.VerifyTTL, cfg.Mail.VerifyURL,
+		cfg.Mail.ResetTTL, cfg.Mail.ResetURL,
 	)
 
 	secureCookies := cfg.Env.IsProd()
 	authHandler := handlers.NewAuthHandler(authSvc, cfg.JWT.RefreshTTL, secureCookies)
 	refreshHandler := handlers.NewRefreshHandler(authSvc, cfg.JWT.RefreshTTL, secureCookies)
 	oauthHandler := handlers.NewOAuthHandler(authSvc, cfg.JWT.RefreshTTL, secureCookies)
+	verificationHandler := handlers.NewVerificationHandler(authSvc)
+	passwordResetHandler := handlers.NewPasswordResetHandler(authSvc)
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(server.RateLimit(rateLimiter, redis_rate.PerMinute(10))) // stricter for auth
@@ -119,6 +138,10 @@ func main() {
 		r.Post("/logout", refreshHandler.Logout)
 		r.Get("/github", oauthHandler.LoginViaGithub)
 		r.Get("/github/callback", oauthHandler.GithubCallback)
+		r.Get("/verify", verificationHandler.Verify)
+		r.Post("/verify/resend", verificationHandler.Resend)
+		r.Post("/password/forgot", passwordResetHandler.Forgot)
+		r.Post("/password/reset", passwordResetHandler.Reset)
 	})
 
 	logger.Info("Starting http server", zap.String("addr", cfg.HTTP.Addr), zap.String("env", string(cfg.Env)))

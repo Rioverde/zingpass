@@ -1,3 +1,19 @@
+// Surface ?verified=1 success after email verification.
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('verified') !== '1') return;
+
+  setTimeout(() => {
+    if (typeof showToast === 'function') {
+      showToast('Email verified! Please sign in.', 'success');
+    }
+  }, 0);
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('verified');
+  window.history.replaceState({}, '', url);
+})();
+
 // Surface OAuth callback failures sent as ?error=...
 (function () {
   const params = new URLSearchParams(window.location.search);
@@ -17,7 +33,12 @@
     OA0003: 'Security check failed — please try again.',
     OA0004: 'Invalid callback from GitHub. Try again.',
     U0001:  'A user with this email already exists.',
+    U0003:  'Please verify your email before signing in.',
     U0010:  'This nickname is already taken.',
+    A0001:  'This verification link is invalid.',
+    A0002:  'This verification link has expired. Request a new one.',
+    A0003:  'No verification token provided.',
+    A0004:  'This verification link has already been used.',
     S0001:  'Something went wrong on our side. Please try again.',
   };
 
@@ -80,14 +101,22 @@ form.addEventListener('submit', async (e) => {
 
     if (res.ok) {
       if (isSignup) {
-        showToast('Account created. Redirecting…', 'success');
-        setTimeout(() => { window.location.href = '/login'; }, 1200);
+        sessionStorage.setItem('pendingVerifyEmail', email_input.value.trim().toLowerCase());
+        showToast('Account created. Check your email…', 'success');
+        setTimeout(() => { window.location.href = '/verify'; }, 1200);
       } else {
         if (body.token) sessionStorage.setItem('token', body.token);
         showToast('Logged in. Redirecting…', 'success');
         setTimeout(() => { window.location.href = '/dashboard'; }, 800);
       }
     } else {
+      // U0003 = email not verified — send them to the verify page with email prefilled.
+      if (body.error && body.error.code === 'U0003') {
+        sessionStorage.setItem('pendingVerifyEmail', email_input.value.trim().toLowerCase());
+        showToast('Please verify your email first…', 'error');
+        setTimeout(() => { window.location.href = '/verify'; }, 1200);
+        return;
+      }
       showToast((body.error && body.error.message) || 'Request failed', 'error');
     }
   } catch (err) {

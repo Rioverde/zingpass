@@ -1,8 +1,0 @@
-Zingpass services
-
-zingweb        http://localhost:8081/login         Frontend (nginx) — login & signup UI
-zingpass       http://localhost:8080               Go API
-kibana         http://localhost:5601               Logs UI — index pattern: zingpass-logs-*
-elasticsearch  http://localhost:9200               ES REST API
-filebeat       (no UI)                             Ships container JSON logs to ES
-

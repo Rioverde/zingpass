@@ -1,0 +1,21 @@
+title: Zingpass Devtools
+description: Local development services
+theme: dark
+color: slate
+headerStyle: clean
+target: _blank
+hideVersion: true
+
+layout:
+  Frontend:
+    style: row
+    columns: 2
+  API:
+    style: row
+    columns: 2
+  Storage & Cache:
+    style: row
+    columns: 2
+  Observability:
+    style: row
+    columns: 3

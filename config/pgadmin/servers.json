@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Zingpass (storage)",
+      "Group": "Servers",
+      "Host": "storage",
+      "Port": 5432,
+      "MaintenanceDB": "zingpass",
+      "Username": "zingpass",
+      "SSLMode": "prefer"
+    }
+  }
+}

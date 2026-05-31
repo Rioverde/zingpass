@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your email — Zingpass</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <script src="/assets/js/toast.js" defer></script>
+  <script src="/assets/js/verify.js" defer></script>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>Check your inbox</h1>
+    <p class="hello">
+      We sent a verification link to your email.<br>
+      Click it to activate your account.
+    </p>
+
+    <form id="resend-form" novalidate>
+      <div>
+        <label for="email-input"><span>@</span></label>
+        <input
+          type="email"
+          name="email"
+          id="email-input"
+          placeholder="Email"
+          autocomplete="email"
+          required
+          readonly
+          aria-readonly="true"
+          title="Locked until verification. Sign in with a different email if you used the wrong one.">
+      </div>
+      <button type="submit" id="resend-btn">Resend email</button>
+    </form>
+
+    <p style="margin-top: 24px;">
+      Already verified? <a href="/login">Sign in</a>
+    </p>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

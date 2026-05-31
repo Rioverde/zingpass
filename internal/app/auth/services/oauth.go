@@ -127,7 +127,9 @@ func (s *AuthService) LoginViaGithub(ctx context.Context, code, userAgent, ip st
 				logger.Error("oauth login failed: random password hash", zap.Error(hashErr))
 				return "", "", apperr.Internal(hashErr)
 			}
-			userID, err = s.store.CreateUser(ctx, gh.Email, gh.Login, pwdHash)
+			// GitHub already proved email ownership (public or verified primary in /user/emails),
+			// so create the user pre-verified — they should not be forced through /verify.
+			userID, err = s.store.CreateVerifiedUser(ctx, gh.Email, gh.Login, pwdHash)
 			if err != nil {
 				logger.Error("oauth login failed: create user", zap.Error(err))
 				return "", "", apperr.Internal(err)

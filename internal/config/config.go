@@ -24,6 +24,7 @@ type Config struct {
 	JWT   JWT
 	Redis Redis
 	OAuth OAuth
+	Mail  Mail
 }
 
 type HTTP struct {
@@ -54,6 +55,18 @@ type OAuth struct {
 	GithubClientID     string
 	GithubClientSecret string
 	GithubRedirectURL  string
+}
+
+type Mail struct {
+	Host      string
+	Port      int
+	User      string
+	Pass      string
+	From      string
+	VerifyURL string
+	VerifyTTL time.Duration
+	ResetURL  string
+	ResetTTL  time.Duration
 }
 
 func Load() (*Config, error) {
@@ -93,6 +106,17 @@ func Load() (*Config, error) {
 			GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 			GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 			GithubRedirectURL:  env("GITHUB_REDIRECT_URL", "http://localhost:8081/auth/github/callback"),
+		},
+		Mail: Mail{
+			Host:      env("MAIL_HOST", "mailhog"),
+			Port:      envInt("MAIL_PORT", 1025),
+			User:      os.Getenv("MAIL_USER"),
+			Pass:      os.Getenv("MAIL_PASSWORD"),
+			From:      env("MAIL_FROM", "no-reply@zingpass.local"),
+			VerifyURL: env("MAIL_VERIFY_URL", "http://localhost:8081/auth/verify"),
+			VerifyTTL: envDuration("MAIL_VERIFY_TTL", 24*time.Hour),
+			ResetURL:  env("MAIL_RESET_URL", "http://localhost:8081/reset-password"),
+			ResetTTL:  envDuration("MAIL_RESET_TTL", 1*time.Hour),
 		},
 	}, nil
 }

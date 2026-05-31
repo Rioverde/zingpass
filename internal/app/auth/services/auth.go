@@ -14,6 +14,7 @@ import (
 	apperr "github.com/Rioverde/zingpass/internal/pkg/errors"
 	"github.com/Rioverde/zingpass/internal/pkg/jwt"
 	"github.com/Rioverde/zingpass/internal/pkg/log"
+	"github.com/Rioverde/zingpass/internal/pkg/mailer"
 	"github.com/Rioverde/zingpass/internal/pkg/validator"
 )
 
@@ -28,6 +29,8 @@ const (
 // rather than concrete storage implementations, enabling testability and pluggable backends.
 type UserProvider interface {
 	CreateUser(ctx context.Context, email, nickname, passwordHash string) (id string, err error)
+	// CreateVerifiedUser is for OAuth signup where the provider proved email ownership.
+	CreateVerifiedUser(ctx context.Context, email, nickname, passwordHash string) (id string, err error)
 	UserByEmail(ctx context.Context, email string) (models.User, error)
 	UserByNickname(ctx context.Context, nickname string) (models.User, error)
 }
@@ -37,12 +40,19 @@ type UserProvider interface {
 // through pluggable provider interfaces, ensuring the service remains testable and decoupled
 // from storage implementation details.
 type AuthService struct {
-	store        UserProvider
-	refresh      RefreshTokenProvider
-	signer       *jwt.Signer
-	refreshTTL   time.Duration
-	oauth        OAuthAccountStore
-	githubConfig *oauth2.Config
+	store         UserProvider
+	refresh       RefreshTokenProvider
+	signer        *jwt.Signer
+	refreshTTL    time.Duration
+	oauth         OAuthAccountStore
+	githubConfig  *oauth2.Config
+	verification  VerificationStore
+	passwordReset PasswordResetStore
+	mailer        mailer.Mailer
+	verifyTTL     time.Duration
+	verifyURLBase string
+	resetTTL      time.Duration
+	resetURLBase  string
 }
 
 // NewAuthService constructs an AuthService with the given provider implementations and configuration.
@@ -51,17 +61,31 @@ func NewAuthService(
 	store UserProvider,
 	refresh RefreshTokenProvider,
 	oauth OAuthAccountStore,
+	verification VerificationStore,
+	passwordReset PasswordResetStore,
 	githubConfig *oauth2.Config,
+	mailer mailer.Mailer,
 	signer *jwt.Signer,
 	refreshTTL time.Duration,
+	verifyTTL time.Duration,
+	verifyURLBase string,
+	resetTTL time.Duration,
+	resetURLBase string,
 ) *AuthService {
 	return &AuthService{
-		store:        store,
-		refresh:      refresh,
-		oauth:        oauth,
-		githubConfig: githubConfig,
-		signer:       signer,
-		refreshTTL:   refreshTTL,
+		store:         store,
+		refresh:       refresh,
+		oauth:         oauth,
+		verification:  verification,
+		passwordReset: passwordReset,
+		githubConfig:  githubConfig,
+		mailer:        mailer,
+		signer:        signer,
+		refreshTTL:    refreshTTL,
+		verifyTTL:     verifyTTL,
+		verifyURLBase: verifyURLBase,
+		resetTTL:      resetTTL,
+		resetURLBase:  resetURLBase,
 	}
 }
 
@@ -120,6 +144,12 @@ func (s *AuthService) Register(ctx context.Context, email, nickname, password st
 		return "", apperr.Internal(err)
 	}
 
+	// Fire off the verification email. Failure is logged but does NOT fail the request —
+	// the user can request resend later.
+	if err := s.sendVerification(ctx, id, email, nickname); err != nil {
+		logger.Error("register: send verification email failed", zap.Error(err))
+	}
+
 	logger.Info("register success", zap.String("user_id", id))
 	return id, nil
 }
@@ -147,6 +177,11 @@ func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip 
 	if err := crypto.ComparePassword(user.PasswordHash, password); err != nil {
 		logger.Warn("login failed: wrong password")
 		return "", "", apperr.Unauthorized(apperr.CodeInvalidCreds, invalidCreds)
+	}
+
+	if !user.EmailStatus.IsVerified() {
+		logger.Warn("login failed: email not verified", zap.String("status", string(user.EmailStatus)))
+		return "", "", apperr.Unauthorized(apperr.CodeEmailUnverified, "please verify your email before signing in")
 	}
 
 	access, refresh, _, err = s.issueTokens(ctx, user.ID, user.Email, userAgent, ip)

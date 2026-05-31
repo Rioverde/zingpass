@@ -9,6 +9,12 @@ definitions:
         example: StrongPass!1
         type: string
     type: object
+  handlers.forgotRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    type: object
   handlers.registerRequest:
     properties:
       email:
@@ -19,6 +25,21 @@ definitions:
         type: string
       password:
         example: StrongPass!1
+        type: string
+    type: object
+  handlers.resendRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    type: object
+  handlers.resetRequest:
+    properties:
+      password:
+        example: NewStrongPass!1
+        type: string
+      token:
+        example: a1b2c3...
         type: string
     type: object
   handlers.tokenResponse:
@@ -154,6 +175,56 @@ paths:
       summary: Revoke refresh token and clear cookie
       tags:
       - auth
+  /auth/password/forgot:
+    post:
+      consumes:
+      - application/json
+      description: Always returns 204; the response does not disclose whether the
+        address is registered.
+      parameters:
+      - description: Forgot payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.forgotRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Request a password-reset email
+      tags:
+      - auth
+  /auth/password/reset:
+    post:
+      consumes:
+      - application/json
+      description: Validates token + password, atomically updates the password_hash,
+        revokes all refresh tokens.
+      parameters:
+      - description: Reset payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.resetRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid input or weak password
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Token invalid/expired/used
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Consume a reset token and set a new password
+      tags:
+      - auth
   /auth/refresh:
     post:
       description: 'Reads the refresh token from cookie (browser) or `X-Refresh-Token`
@@ -219,6 +290,45 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Create a new user account
+      tags:
+      - auth
+  /auth/verify:
+    get:
+      description: Consumes a verification token from the email link, marking the
+        user as verified. Always redirects to /login.
+      parameters:
+      - description: Verification token
+        in: query
+        name: token
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?verified=1 on success or /login?error=<code>
+            on failure
+      summary: Verify email via signed token
+      tags:
+      - auth
+  /auth/verify/resend:
+    post:
+      consumes:
+      - application/json
+      description: Always returns 204 to avoid disclosing whether the address is registered.
+      parameters:
+      - description: Resend payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.resendRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Resend the verification email
       tags:
       - auth
 schemes:

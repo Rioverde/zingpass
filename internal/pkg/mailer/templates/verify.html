@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #2E2B41;">
+    <p>Hi {{.Nickname}},</p>
+    <p>Please confirm your email address by clicking the link below:</p>
+    <p>
+      <a href="{{.VerifyURL}}"
+         style="display:inline-block;padding:.75em 1.5em;background:#5B7CFA;color:#fff;text-decoration:none;border-radius:8px;">
+        Verify my email
+      </a>
+    </p>
+    <p>Or paste this URL into your browser:<br>{{.VerifyURL}}</p>
+    <p style="color:#6E6B85;font-size:.9em;">This link expires in 24 hours. If you didn't request it, ignore this email.</p>
+  </body>
+</html>

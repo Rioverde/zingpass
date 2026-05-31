@@ -95,6 +95,16 @@ div:has(input:focus) > label{
 form input::placeholder{
   color: var(--placeholder-color);
 }
+form input:read-only{
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+form input:read-only:hover{
+  border-color: var(--input-color);
+}
+div:has(input:read-only) > label{
+  opacity: 0.85;
+}
 form input{
   color: var(--text-color);
 }
