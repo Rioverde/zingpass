@@ -1,0 +1,491 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Auth service: register, login, JWT-based access tokens, refresh-token rotation with reuse detection.",
+        "title": "Zingpass API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/auth/github": {
+            "get": {
+                "description": "Generates a CSRF state, stores it in a short-lived cookie, and redirects the user to GitHub.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Start GitHub OAuth login",
+                "responses": {
+                    "302": {
+                        "description": "Redirect to github.com"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/github/callback": {
+            "get": {
+                "description": "Verifies state, exchanges code for tokens, sets refresh cookie, and redirects to the dashboard.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Handle GitHub OAuth callback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Authorization code from GitHub",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF state echoed by GitHub",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Error code if user denied access",
+                        "name": "error",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to /dashboard on success, /login on failure"
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "Verifies email/password and returns a short-lived access JWT plus a long-lived refresh token. Refresh is also set as an httpOnly cookie for browser clients.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Authenticate and issue tokens",
+                "parameters": [
+                    {
+                        "description": "Login payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.credentials"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.tokenResponse"
+                        },
+                        "headers": {
+                            "Set-Cookie": {
+                                "type": "string",
+                                "description": "refresh_token=...; HttpOnly; Path=/auth"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid credentials",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "description": "Idempotent. Always clears the refresh cookie; if a valid token is present, revokes it in storage too.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Revoke refresh token and clear cookie",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Refresh token (alternative to cookie)",
+                        "name": "X-Refresh-Token",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/password/forgot": {
+            "post": {
+                "description": "Always returns 204; the response does not disclose whether the address is registered.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request a password-reset email",
+                "parameters": [
+                    {
+                        "description": "Forgot payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.forgotRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/password/reset": {
+            "post": {
+                "description": "Validates token + password, atomically updates the password_hash, revokes all refresh tokens.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Consume a reset token and set a new password",
+                "parameters": [
+                    {
+                        "description": "Reset payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.resetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Invalid input or weak password",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Token invalid/expired/used",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "description": "Reads the refresh token from cookie (browser) or `X-Refresh-Token` header (mobile/API). On success rotates: the old refresh is revoked and replaced by a new one.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Rotate refresh token and issue a new access token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Refresh token (alternative to cookie)",
+                        "name": "X-Refresh-Token",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.tokenResponse"
+                        },
+                        "headers": {
+                            "Set-Cookie": {
+                                "type": "string",
+                                "description": "refresh_token=...; HttpOnly; Path=/auth"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing, invalid, expired, or revoked refresh token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "description": "Validates input, ensures email and nickname are unique, hashes password with bcrypt, and creates the user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Create a new user account",
+                "parameters": [
+                    {
+                        "description": "Registration payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.registerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.userIDResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Email or nickname already taken",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/verify": {
+            "get": {
+                "description": "Consumes a verification token from the email link, marking the user as verified. Always redirects to /login.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Verify email via signed token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Verification token",
+                        "name": "token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to /login?verified=1 on success or /login?error=\u003ccode\u003e on failure"
+                    }
+                }
+            }
+        },
+        "/auth/verify/resend": {
+            "post": {
+                "description": "Always returns 204 to avoid disclosing whether the address is registered.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Resend the verification email",
+                "parameters": [
+                    {
+                        "description": "Resend payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.resendRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handlers.credentials": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "StrongPass!1"
+                }
+            }
+        },
+        "handlers.forgotRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                }
+            }
+        },
+        "handlers.registerRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "nickname": {
+                    "type": "string",
+                    "example": "johndoe"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "StrongPass!1"
+                }
+            }
+        },
+        "handlers.resendRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                }
+            }
+        },
+        "handlers.resetRequest": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "NewStrongPass!1"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "a1b2c3..."
+                }
+            }
+        },
+        "handlers.tokenResponse": {
+            "type": "object",
+            "properties": {
+                "refresh": {
+                    "type": "string",
+                    "example": "a1b2c3d4e5f6..."
+                },
+                "token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "handlers.userIDResponse": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "server.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "U0001"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "user with this email already exists"
+                }
+            }
+        },
+        "server.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/server.ErrorBody"
+                }
+            }
+        }
+    }
+}

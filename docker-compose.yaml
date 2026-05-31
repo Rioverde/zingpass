@@ -1,0 +1,117 @@
+services:
+  storage:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: zingpass
+      POSTGRES_USER: zingpass
+      POSTGRES_PASSWORD: ${STORAGE_DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zingpass -d zingpass"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
+
+  cache:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  mailhog:
+    image: axllent/mailpit:latest  # ARM64-friendly Mailhog successor
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # web UI
+
+  zingpass:
+    build: .
+    restart: on-failure
+    environment:
+      STORAGE_DB_HOST: storage
+      STORAGE_DB_PASSWORD: ${STORAGE_DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL: ${JWT_TTL}
+      REDIS_ADDR: cache:6379
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL}
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM:-no-reply@zingpass.local}
+      MAIL_VERIFY_URL: ${MAIL_VERIFY_URL:-http://localhost:8081/auth/verify}
+      MAIL_VERIFY_TTL: ${MAIL_VERIFY_TTL:-24h}
+      ENV: ${ENV:-dev}
+    ports:
+      - "8080:8080"
+    depends_on:
+      storage:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+
+  zingweb:
+    image: nginx:1.27-alpine
+    restart: on-failure
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./config/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8081:80"
+    depends_on:
+      - zingpass
+
+  hub:
+    image: ghcr.io/gethomepage/homepage:latest
+    restart: on-failure
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: "localhost:8090,localhost"
+    volumes:
+      - ./config/homepage:/app/config
+    ports:
+      - "8090:3000"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: on-failure
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@zingpass.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['dev','local','localhost']"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./config/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "8091:80"
+    depends_on:
+      storage:
+        condition: service_healthy
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    restart: on-failure
+    ports:
+      - "8092:5540"
+    depends_on:
+      cache:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  pgadmin_data:

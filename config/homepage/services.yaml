@@ -1,0 +1,52 @@
+---
+- Frontend:
+    - Login:
+        href: http://localhost:8081/login
+        description: Sign in form
+        icon: si-letsencrypt
+    - Signup:
+        href: http://localhost:8081/signup
+        description: Create a new account
+        icon: si-letsencrypt
+
+- API:
+    - Swagger UI:
+        href: http://localhost:8080/swagger/index.html
+        description: Interactive API docs
+        icon: si-swagger
+
+- Storage & Cache:
+    - pgAdmin:
+        href: http://localhost:8091
+        description: "Postgres web UI — admin@zingpass.dev / admin"
+        icon: si-pgadmin
+    - RedisInsight:
+        href: http://localhost:8092
+        description: Redis web UI (host=cache port=6379)
+        icon: si-redis
+
+- Observability:
+    - Kibana:
+        href: http://localhost:5601
+        description: Logs UI — pattern zingpass-logs-*
+        icon: si-kibana
+    - Elasticsearch:
+        href: http://localhost:9200
+        description: ES REST API
+        icon: si-elasticsearch
+    - Mailpit:
+        href: http://localhost:8025
+        description: Outgoing emails (SMTP catcher)
+        icon: si-maildotru
+    - Grafana:
+        href: http://localhost:3000
+        description: "Metrics dashboards — admin / admin"
+        icon: si-grafana
+    - Prometheus:
+        href: http://localhost:9090
+        description: Metrics scrape + query
+        icon: si-prometheus
+    - cAdvisor:
+        href: http://localhost:8093
+        description: CPU/RAM per container
+        icon: si-docker

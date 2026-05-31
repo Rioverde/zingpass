@@ -1,0 +1,120 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx1g
+      - bootstrap.memory_lock=true
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_PUBLICBASEURL=http://localhost:5601
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5601/api/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.13.0
+    user: root
+    command: ["filebeat", "-e", "-strict.perms=false"]
+    volumes:
+      - ./config/observability/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - filebeat_data:/usr/share/filebeat/data
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: on-failure
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=14d"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    restart: on-failure
+    environment:
+      DATA_SOURCE_NAME: "postgresql://zingpass:${STORAGE_DB_PASSWORD}@storage:5432/zingpass?sslmode=disable"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: on-failure
+    environment:
+      REDIS_ADDR: redis://cache:6379
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    restart: on-failure
+    command:
+      - "--nginx.scrape-uri=http://zingweb/stub_status"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: on-failure
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8093:8080"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: on-failure
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  es_data:
+  filebeat_data:
+  prometheus_data:
+  grafana_data:

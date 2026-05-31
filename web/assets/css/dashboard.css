@@ -1,0 +1,50 @@
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wrapper {
+  box-sizing: border-box;
+  background-color: var(--base-color);
+  width: min(560px, 90%);
+  height: auto;
+  padding: 40px;
+  border-radius: 20px;
+  text-align: center;
+}
+
+h1 {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+
+.hello {
+  color: var(--placeholder-color);
+  font-size: 1rem;
+  margin-bottom: 32px;
+}
+
+button {
+  margin-top: 10px;
+  border: none;
+  border-radius: 1000px;
+  padding: .85em 4em;
+  background-color: var(--accent-color);
+  color: var(--text-color);
+  font: inherit;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: 150ms ease;
+}
+
+button:hover {
+  background-color: var(--text-color);
+  color: var(--base-color);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

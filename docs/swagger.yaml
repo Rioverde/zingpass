@@ -1,0 +1,336 @@
+basePath: /
+definitions:
+  handlers.credentials:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: StrongPass!1
+        type: string
+    type: object
+  handlers.forgotRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    type: object
+  handlers.registerRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      nickname:
+        example: johndoe
+        type: string
+      password:
+        example: StrongPass!1
+        type: string
+    type: object
+  handlers.resendRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    type: object
+  handlers.resetRequest:
+    properties:
+      password:
+        example: NewStrongPass!1
+        type: string
+      token:
+        example: a1b2c3...
+        type: string
+    type: object
+  handlers.tokenResponse:
+    properties:
+      refresh:
+        example: a1b2c3d4e5f6...
+        type: string
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  handlers.userIDResponse:
+    properties:
+      user_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  server.ErrorBody:
+    properties:
+      code:
+        example: U0001
+        type: string
+      message:
+        example: user with this email already exists
+        type: string
+    type: object
+  server.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/server.ErrorBody'
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: 'Auth service: register, login, JWT-based access tokens, refresh-token
+    rotation with reuse detection.'
+  title: Zingpass API
+  version: "1.0"
+paths:
+  /auth/github:
+    get:
+      description: Generates a CSRF state, stores it in a short-lived cookie, and
+        redirects the user to GitHub.
+      responses:
+        "302":
+          description: Redirect to github.com
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Start GitHub OAuth login
+      tags:
+      - auth
+  /auth/github/callback:
+    get:
+      description: Verifies state, exchanges code for tokens, sets refresh cookie,
+        and redirects to the dashboard.
+      parameters:
+      - description: Authorization code from GitHub
+        in: query
+        name: code
+        type: string
+      - description: CSRF state echoed by GitHub
+        in: query
+        name: state
+        type: string
+      - description: Error code if user denied access
+        in: query
+        name: error
+        type: string
+      responses:
+        "302":
+          description: Redirect to /dashboard on success, /login on failure
+      summary: Handle GitHub OAuth callback
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Verifies email/password and returns a short-lived access JWT plus
+        a long-lived refresh token. Refresh is also set as an httpOnly cookie for
+        browser clients.
+      parameters:
+      - description: Login payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.credentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            Set-Cookie:
+              description: refresh_token=...; HttpOnly; Path=/auth
+              type: string
+          schema:
+            $ref: '#/definitions/handlers.tokenResponse'
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Authenticate and issue tokens
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Idempotent. Always clears the refresh cookie; if a valid token
+        is present, revokes it in storage too.
+      parameters:
+      - description: Refresh token (alternative to cookie)
+        in: header
+        name: X-Refresh-Token
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Revoke refresh token and clear cookie
+      tags:
+      - auth
+  /auth/password/forgot:
+    post:
+      consumes:
+      - application/json
+      description: Always returns 204; the response does not disclose whether the
+        address is registered.
+      parameters:
+      - description: Forgot payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.forgotRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Request a password-reset email
+      tags:
+      - auth
+  /auth/password/reset:
+    post:
+      consumes:
+      - application/json
+      description: Validates token + password, atomically updates the password_hash,
+        revokes all refresh tokens.
+      parameters:
+      - description: Reset payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.resetRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid input or weak password
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Token invalid/expired/used
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Consume a reset token and set a new password
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      description: 'Reads the refresh token from cookie (browser) or `X-Refresh-Token`
+        header (mobile/API). On success rotates: the old refresh is revoked and replaced
+        by a new one.'
+      parameters:
+      - description: Refresh token (alternative to cookie)
+        in: header
+        name: X-Refresh-Token
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            Set-Cookie:
+              description: refresh_token=...; HttpOnly; Path=/auth
+              type: string
+          schema:
+            $ref: '#/definitions/handlers.tokenResponse'
+        "401":
+          description: Missing, invalid, expired, or revoked refresh token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Rotate refresh token and issue a new access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Validates input, ensures email and nickname are unique, hashes
+        password with bcrypt, and creates the user.
+      parameters:
+      - description: Registration payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.registerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.userIDResponse'
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Email or nickname already taken
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Create a new user account
+      tags:
+      - auth
+  /auth/verify:
+    get:
+      description: Consumes a verification token from the email link, marking the
+        user as verified. Always redirects to /login.
+      parameters:
+      - description: Verification token
+        in: query
+        name: token
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to /login?verified=1 on success or /login?error=<code>
+            on failure
+      summary: Verify email via signed token
+      tags:
+      - auth
+  /auth/verify/resend:
+    post:
+      consumes:
+      - application/json
+      description: Always returns 204 to avoid disclosing whether the address is registered.
+      parameters:
+      - description: Resend payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.resendRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Resend the verification email
+      tags:
+      - auth
+schemes:
+- http
+swagger: "2.0"
